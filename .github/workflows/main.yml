@@ -280,6 +280,16 @@ jobs:
           mv "$standard_apk" "$apk_dir/app-apple-music-arm64-v8a-release.apk"
           mv "$standard_backup" "$standard_apk"
 
+      # 手机标准版 32 位（armv7）—— 供 32 位 Android 设备使用。
+      # 上游仅构建 arm64，此处补一个 android-arm 变体；渲染引擎与 standard 一致（Skia）。
+      - name: Flutter build APK (standard, armeabi-v7a, Skia)
+        run: |
+          flutter build apk --release --flavor standard --split-per-abi --target-platform android-arm \
+            --android-project-arg=md3EnableImpeller=false \
+            --dart-define=APP_VERSION=${{ steps.version.outputs.version }} \
+            --build-name=${{ steps.version.outputs.version }} \
+            --build-number=${{ steps.version.outputs.versionCode }}
+
       # TV 版：MD3_TV 旗标启用 dpad 遥控导航；不含 3D / USB 独占 / 歌词推送。
       # TV 全部使用 Skia 渲染引擎，并产出 arm64 + armv7(32位) 两个 ABI。
       - name: Flutter build TV APK (tv flavor, arm64-v8a, Skia)
@@ -324,6 +334,7 @@ jobs:
           rename_apk app-apple-music-arm64-v8a-release.apk apple-music arm64-v8a
           rename_apk app-arm64-v8a-tv-release.apk          tv          arm64-v8a
           rename_apk app-armeabi-v7a-tv-release.apk        tv          armeabi-v7a
+          rename_apk app-armeabi-v7a-standard-release.apk  standard    armeabi-v7a
           echo "=== 重命名后的产物 ==="
           ls -lh "$apk_dir"/
 
@@ -376,6 +387,7 @@ jobs:
           am_apk="$apk_dir/MD3Music-${ver}-apple-music-arm64-v8a.apk"
           tv64_apk="$apk_dir/MD3Music-${ver}-tv-arm64-v8a.apk"
           tv32_apk="$apk_dir/MD3Music-${ver}-tv-armeabi-v7a.apk"
+          std32_apk="$apk_dir/MD3Music-${ver}-standard-armeabi-v7a.apk"
 
           apk_id() { "$aapt2" dump badging "$1" | sed -n "s/^package: name='\([^']*\)'.*/\1/p"; }
           native_code() { "$aapt2" dump badging "$1" | sed -n "s/^native-code: //p"; }
@@ -431,6 +443,7 @@ jobs:
           assert_eq "$(apk_id "$am_apk")" "com.apple.android.music" "apple-music 包名"
           assert_eq "$(apk_id "$tv64_apk")" "com.md3music.md3music.tv" "tv-arm64 包名"
           assert_eq "$(apk_id "$tv32_apk")" "com.md3music.md3music.tv" "tv-arm32 包名"
+          assert_eq "$(apk_id "$std32_apk")" "com.md3music.md3music" "standard-32 包名"
 
           # ABI 校验：arm64 包只含 arm64-v8a，arm32 包只含 armeabi-v7a
           # aapt2 输出自带单引号（native-code: 'arm64-v8a'），故期望值含引号
@@ -438,12 +451,14 @@ jobs:
           assert_eq "$(native_code "$am_apk")"     "'arm64-v8a'"     "apple-music ABI"
           assert_eq "$(native_code "$tv64_apk")"   "'arm64-v8a'"     "tv-arm64 ABI"
           assert_eq "$(native_code "$tv32_apk")"   "'armeabi-v7a'"   "tv-arm32 ABI"
+          assert_eq "$(native_code "$std32_apk")"  "'armeabi-v7a'"   "standard-32 ABI"
 
           # 引擎校验：standard / tv → Skia（false），仅 apple-music → Impeller（true）
           assert_eq "$(impeller_val "$std_apk")" "false" "standard 引擎(Skia)"
           assert_eq "$(impeller_val "$am_apk")"  "true"  "apple-music 引擎(Impeller)"
           assert_eq "$(impeller_val "$tv64_apk")" "false" "tv-arm64 引擎(Skia)"
           assert_eq "$(impeller_val "$tv32_apk")" "false" "tv-arm32 引擎(Skia)"
+          assert_eq "$(impeller_val "$std32_apk")" "false" "standard-32 引擎(Skia)"
           echo "引擎校验完成：standard/tv=Skia, apple-music=Impeller"
 
           # TV 包专项校验（与 ci.yml 同口径）：不含 USB 独占驱动，且 MD3_TV 旗标生效
@@ -586,6 +601,7 @@ jobs:
             echo "- **MD3Music-${VERSION}-standard-arm64-v8a.apk** — （推荐）标准版-64位：大多数现代 Android 设备"
             echo "- **MD3Music-${VERSION}-apple-music-arm64-v8a.apk** — 随身听兼容版-64位：Vivo 原子随身听兼容包（包名 \`com.apple.android.music\`，不含 3D 封面）"
             echo "- **MD3Music-${VERSION}-tv-arm64-v8a.apk** — TV版-64位：Android TV 专用包（D-pad 遥控导航，包名后缀 \`.tv\`，Skia）"
+            echo "- **MD3Music-${VERSION}-standard-armeabi-v7a.apk** — 标准版-32位：较旧的 32 位 Android 设备（Skia）"
             echo "- **MD3Music-${VERSION}-tv-armeabi-v7a.apk** — TV版-32位：Android TV 专用包（D-pad 遥控导航，包名后缀 \`.tv\`，Skia）"
             echo "- **md3music-windows-${VERSION}.zip** — Windows 便携版：解压后运行 \`md3music.exe\` 即可（自带 VC++ 运行库）"
             echo ""
